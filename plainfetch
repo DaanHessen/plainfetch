@@ -1,63 +1,85 @@
 #!/usr/bin/env bash
+CFG="$HOME/.config/plainfetch/config"
+DEFAULT_EXTRAS=(hostname gpu shell desktop wm)
+alias_pf=false
+if [ -r "$CFG" ]; then
+  while IFS='=' read -r key val; do
+    case "$key" in
+      extra_fields) IFS=',' read -ra extras <<< "$val" ;;
+      alias_pf)     [[ "$val" =~ ^(true|1|yes)$ ]] && alias_pf=true ;;
+    esac
+  done < "$CFG"
+else
+  extras=("${DEFAULT_EXTRAS[@]}")
+fi
 
 copy=false
-extra=false
-
-while getopts "ca" opt; do
-  case $opt in
+show_all_extras=false
+declare -A want
+usage(){ echo "Usage: $0 [-c] [-a] [-H] [-G] [-S] [-D] [-W] [-I] [-M] [-T]"; exit 1; }
+while getopts "caHGSDWIMT" opt; do
+  case "$opt" in
     c) copy=true ;;
-    a) extra=true ;;
-    *) echo "Usage: $0 [-c] [-a]"; exit 1 ;;
+    a) show_all_extras=true ;;
+    H) want[hostname]=1 ;;
+    G) want[gpu]=1 ;;
+    S) want[shell]=1 ;;
+    D) want[desktop]=1 ;;
+    W) want[wm]=1 ;;
+    I) want[ip]=1 ;;
+    M) want[mac]=1 ;;
+    T) want[timezone]=1 ;;
+    *) usage ;;
   esac
 done
 
-output=""
-output+="OS:      $(lsb_release -ds 2>/dev/null || uname -o)\n"
-output+="Kernel:  $(uname -r)\n"
-output+="Uptime:  $(uptime -p | sed 's/up //')\n"
-
+out=""
+out+="OS:      $(lsb_release -ds 2>/dev/null || uname -o)\n"
+out+="Kernel:  $(uname -r)\n"
+out+="Uptime:  $(uptime -p | sed 's/^up //')\n"
 mem_used=$(free -h | awk '/Mem:/ {print $3}')
 mem_total=$(free -h | awk '/Mem:/ {print $2}')
-output+="Memory:  $mem_used / $mem_total\n"
-
+out+="Memory:  $mem_used / $mem_total\n"
 cpu=$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ //')
-output+="CPU:     $cpu\n"
-
+out+="CPU:     $cpu\n"
 disk_used=$(df -h --total 2>/dev/null | awk '/total/ {print $3}')
 disk_total=$(df -h --total 2>/dev/null | awk '/total/ {print $2}')
-output+="Disk:    $disk_used / $disk_total\n"
-
+out+="Disk:    $disk_used / $disk_total\n"
 if [ -d /boot/grub ] || [ -d /boot/grub2 ]; then
-    grub_version=$(grub-install --version 2>/dev/null | awk '{print $NF}')
-    output+="Bootloader: GRUB $grub_version\n"
+  gv=$(grub-install --version 2>/dev/null | awk '{print $NF}')
+  out+="Bootloader: GRUB $gv\n"
 else
-    output+="Bootloader: Not GRUB or undetected\n"
+  out+="Bootloader: Not GRUB or undetected\n"
 fi
 
-if $extra; then
-  hostname=$(hostname)
-  gpu=$(lspci | grep -i 'vga\|3d' | head -n1 | cut -d: -f3- | sed 's/^ //')
-  shell=$SHELL
-  desktop=${XDG_CURRENT_DESKTOP:-N/A}
-  wm=$(echo "$XDG_SESSION_DESKTOP" | tr '[:upper:]' '[:lower:]')
+function get_hostname  { echo "Hostname:  $(uname -n)"; }
+function get_gpu       { echo "GPU:       $(lspci | grep -i 'vga\|3d' | head -n1 | cut -d: -f3- | sed 's/^ //')"; }
+function get_shell     { echo "Shell:     ${SHELL##*/}"; }
+function get_desktop   { echo "Desktop:   ${XDG_CURRENT_DESKTOP:-N/A}"; }
+function get_wm        { echo "WM:        ${XDG_SESSION_DESKTOP,,}"; }
+function get_ip        { echo "IP:        $(ip route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}')"; }
+function get_mac       { iface=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $5; exit}'); echo "MAC:       $(ip link show "$iface" 2>/dev/null | awk '/link\/ether/ {print $2}')"; }
+function get_timezone  { echo "Timezone:  $(cat /etc/timezone 2>/dev/null || date +%Z)"; }
 
-  output+="Hostname: $hostname\n"
-  output+="GPU:      ${gpu:-N/A}\n"
-  output+="Shell:    ${shell##*/}\n"
-  output+="Desktop:  ${desktop:-N/A}\n"
-  output+="WM:       ${wm:-N/A}\n"
+if $show_all_extras; then
+  for fld in "${extras[@]}"; do f="get_$fld"; out+="$($f)\n"; done
+else
+  for fld in "${!want[@]}";   do f="get_$fld"; out+="$($f)\n"; done
 fi
 
-echo -e "$output"
+echo -e "$out"
 
 if $copy; then
-  if command -v xclip >/dev/null 2>&1; then
-    echo -e "$output" | xclip -selection clipboard
-  elif command -v xsel >/dev/null 2>&1; then
-    echo -e "$output" | xsel --clipboard
-  elif command -v pbcopy >/dev/null 2>&1; then  # macOS
-    echo -e "$output" | pbcopy
-  else
-    echo "No clipboard utility found (xclip, xsel, pbcopy)."
+  if   command -v xclip >/dev/null; then echo -e "$out" | xclip -selection clipboard
+  elif command -v xsel  >/dev/null; then echo -e "$out" | xsel --clipboard
+  elif command -v pbcopy >/dev/null; then echo -e "$out" | pbcopy
+  fi
+fi
+
+if $alias_pf; then
+  PF_BIN="$HOME/.local/bin/pf"
+  if [ ! -e "$PF_BIN" ]; then
+    mkdir -p "$(dirname "$PF_BIN")"
+    ln -s "$(realpath "$0")" "$PF_BIN"
   fi
 fi
