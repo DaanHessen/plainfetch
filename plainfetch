@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+
+copy=false
+extra=false
+
+# Parse options
+while getopts "ca" opt; do
+  case $opt in
+    c) copy=true ;;
+    a) extra=true ;;
+    *) echo "Usage: $0 [-c] [-a]"; exit 1 ;;
+  esac
+done
+
+# Gather core info
+output=""
+output+="OS:      $(lsb_release -ds 2>/dev/null || uname -o)\n"
+output+="Kernel:  $(uname -r)\n"
+output+="Uptime:  $(uptime -p | sed 's/up //')\n"
+
+mem_used=$(free -h | awk '/Mem:/ {print $3}')
+mem_total=$(free -h | awk '/Mem:/ {print $2}')
+output+="Memory:  $mem_used / $mem_total\n"
+
+cpu=$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ //')
+output+="CPU:     $cpu\n"
+
+disk_used=$(df -h --total 2>/dev/null | awk '/total/ {print $3}')
+disk_total=$(df -h --total 2>/dev/null | awk '/total/ {print $2}')
+output+="Disk:    $disk_used / $disk_total\n"
+
+if [ -d /boot/grub ] || [ -d /boot/grub2 ]; then
+    grub_version=$(grub-install --version 2>/dev/null | awk '{print $NF}')
+    output+="Bootloader: GRUB $grub_version\n"
+else
+    output+="Bootloader: Not GRUB or undetected\n"
+fi
+
+# Add extra info if -a was passed
+if $extra; then
+  hostname=$(hostname)
+  gpu=$(lspci | grep -i 'vga\|3d' | head -n1 | cut -d: -f3- | sed 's/^ //')
+  shell=$SHELL
+  desktop=${XDG_CURRENT_DESKTOP:-N/A}
+  wm=$(echo "$XDG_SESSION_DESKTOP" | tr '[:upper:]' '[:lower:]')
+
+  output+="Hostname: $hostname\n"
+  output+="GPU:      ${gpu:-N/A}\n"
+  output+="Shell:    ${shell##*/}\n"
+  output+="Desktop:  ${desktop:-N/A}\n"
+  output+="WM:       ${wm:-N/A}\n"
+fi
+
+# Print to terminal
+echo -e "$output"
+
+# Copy to clipboard if -c was passed
+if $copy; then
+  if command -v xclip >/dev/null 2>&1; then
+    echo -e "$output" | xclip -selection clipboard
+  elif command -v xsel >/dev/null 2>&1; then
+    echo -e "$output" | xsel --clipboard
+  elif command -v pbcopy >/dev/null 2>&1; then  # macOS
+    echo -e "$output" | pbcopy
+  else
+    echo "No clipboard utility found (xclip, xsel, pbcopy)."
+  fi
+fi
