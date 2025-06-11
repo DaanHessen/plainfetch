@@ -3,7 +3,6 @@
 copy=false
 extra=false
 
-# Parse options
 while getopts "ca" opt; do
   case $opt in
     c) copy=true ;;
@@ -12,7 +11,6 @@ while getopts "ca" opt; do
   esac
 done
 
-# Gather core info
 output=""
 output+="OS:      $(lsb_release -ds 2>/dev/null || uname -o)\n"
 output+="Kernel:  $(uname -r)\n"
@@ -36,7 +34,6 @@ else
     output+="Bootloader: Not GRUB or undetected\n"
 fi
 
-# Add extra info if -a was passed
 if $extra; then
   hostname=$(hostname)
   gpu=$(lspci | grep -i 'vga\|3d' | head -n1 | cut -d: -f3- | sed 's/^ //')
@@ -51,10 +48,8 @@ if $extra; then
   output+="WM:       ${wm:-N/A}\n"
 fi
 
-# Print to terminal
 echo -e "$output"
 
-# Copy to clipboard if -c was passed
 if $copy; then
   if command -v xclip >/dev/null 2>&1; then
     echo -e "$output" | xclip -selection clipboard
