@@ -2,9 +2,6 @@
 
 *Your system info, plain and simple.*
 
-![plainfetch screenshot](screenshot.png)
-*(Replace this with a screenshot of plainfetch in action!)*
-
 ### About
 
 `plainfetch` is a lightweight, no-frills system information tool for minimalists. It's written in simple shell script, making it blazingly fast and easy to understand and modify.
